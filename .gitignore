@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.env
+.venv
+env/
+venv/
+ENV/
+gater_env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+.DS_Store
+
+# Project specific
+workspace/repos/
+workspace/logs/
+workspace/gater_knowledge_graph*
+*.log
+
+# Research data (keep sample data, ignore large datasets)
+workspace/data/*.jsonl
+!workspace/data/sample_*.jsonl
+
+# Temporary files
+*.tmp
+*.temp
