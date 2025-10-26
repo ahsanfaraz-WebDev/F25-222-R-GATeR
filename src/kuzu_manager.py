@@ -20,13 +20,13 @@ logger = logging.getLogger(__name__)
 class KuzuManager:
     """Manages Kuzu database operations for GATeR knowledge graph"""
     
-    def __init__(self, db_path: str, buffer_pool_size: int = 1073741824):
+    def __init__(self, db_path: str, buffer_pool_size: int = 4294967296):
         """
         Initialize Kuzu database manager
         
         Args:
             db_path: Path to Kuzu database
-            buffer_pool_size: Buffer pool size in bytes
+            buffer_pool_size: Buffer pool size in bytes (default: 4GB)
         """
         if not KUZU_AVAILABLE:
             logger.warning("WARNING: Kuzu library not available. Database features will be disabled.")
@@ -303,12 +303,13 @@ class KuzuManager:
                     logger.error(f"ERROR: Failed to create {rel_name} relationship: {e}")
                     raise
     
-    def insert_entities(self, entities: List[Dict[str, Any]]) -> Tuple[int, int]:
+    def insert_entities(self, entities: List[Dict[str, Any]], batch_size: int = 1000) -> Tuple[int, int]:
         """
-        Insert or update entities in the database
+        Insert or update entities in the database with batch processing
         
         Args:
             entities: List of entity dictionaries
+            batch_size: Number of entities to process in each batch
             
         Returns:
             Tuple of (inserted_count, updated_count)
@@ -318,36 +319,60 @@ class KuzuManager:
             
         inserted_count = 0
         updated_count = 0
+        total_entities = len(entities)
+        
+        logger.info(f"Inserting {total_entities} entities in batches of {batch_size}")
         
         try:
-            for entity in entities:
-                entity_type = entity.get('type', '')
-                entity_id = entity.get('id', '')
+            # Process entities in batches to manage memory usage
+            for batch_start in range(0, total_entities, batch_size):
+                batch_end = min(batch_start + batch_size, total_entities)
+                batch = entities[batch_start:batch_end]
                 
-                if not entity_id:
-                    logger.warning(f"Skipping entity without ID: {entity}")
-                    continue
+                logger.debug(f"Processing batch {batch_start//batch_size + 1}/{(total_entities + batch_size - 1)//batch_size} ({batch_start+1}-{batch_end} of {total_entities})")
                 
-                # Determine target table based on entity type
-                if entity_type in ['commit']:
-                    table_name = 'Commit'
-                    success = self._insert_commit(entity)
-                elif entity_type in ['issue']:
-                    table_name = 'Issue'
-                    success = self._insert_issue(entity)
-                elif entity_type in ['pull_request']:
-                    table_name = 'PullRequest'
-                    success = self._insert_pullrequest(entity)
-                elif entity_type in ['repository']:
-                    table_name = 'Repository'
-                    success = self._insert_repository(entity)
-                else:
-                    # Default to CodeEntity for all other types
-                    table_name = 'CodeEntity'
-                    success = self._insert_code_entity(entity)
+                batch_inserted = 0
+                for entity in batch:
+                    entity_type = entity.get('type', '')
+                    entity_id = entity.get('id', '')
+                    
+                    if not entity_id:
+                        logger.warning(f"Skipping entity without ID: {entity}")
+                        continue
+                    
+                    try:
+                        # Determine target table based on entity type
+                        if entity_type in ['commit']:
+                            table_name = 'Commit'
+                            success = self._insert_commit(entity)
+                        elif entity_type in ['issue']:
+                            table_name = 'Issue'
+                            success = self._insert_issue(entity)
+                        elif entity_type in ['pull_request']:
+                            table_name = 'PullRequest'
+                            success = self._insert_pullrequest(entity)
+                        elif entity_type in ['repository']:
+                            table_name = 'Repository'
+                            success = self._insert_repository(entity)
+                        else:
+                            # Default to CodeEntity for all other types
+                            table_name = 'CodeEntity'
+                            success = self._insert_code_entity(entity)
+                        
+                        if success:
+                            batch_inserted += 1
+                            inserted_count += 1
+                            
+                    except Exception as e:
+                        logger.error(f"ERROR: Failed to insert entity {entity_id}: {e}")
+                        # Continue with next entity instead of failing entire batch
+                        continue
                 
-                if success:
-                    inserted_count += 1
+                logger.info(f"Batch {batch_start//batch_size + 1} completed: {batch_inserted}/{len(batch)} entities inserted")
+                
+                # Force garbage collection after each batch to free memory
+                import gc
+                gc.collect()
                 
         except Exception as e:
             logger.error(f"ERROR: Error inserting entities: {e}")

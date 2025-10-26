@@ -1256,6 +1256,164 @@
                 </div>
             </div>
 
+            <!-- KGCompass Relevance Scoring -->
+            <div id="kgcompass-section" class="card hidden slide-up">
+                <h2>
+                    <i class="fas fa-bullseye"></i>
+                    KGCompass Relevance Scoring (Step 5)
+                </h2>
+                
+                <div class="info-box" style="margin-bottom: 20px; padding: 15px; background: rgba(162, 123, 92, 0.1); border-radius: 8px; border-left: 4px solid var(--color-accent);">
+                    <p><strong>KGCompass Formula:</strong> S(f) = β^l(f) · (α · cos(ei,ef) + (1−α) · lev(ti,tf))</p>
+                    <p style="margin-top: 8px; font-size: 0.9em; color: var(--text-muted);">
+                        Combines path length decay, semantic similarity, and textual similarity to rank code entities by relevance to problem descriptions.
+                    </p>
+                </div>
+                
+                <!-- Problem Input -->
+                <div class="problem-input-section" style="margin-bottom: 25px;">
+                    <h3 style="margin-bottom: 15px; color: var(--color-primary);">
+                        <i class="fas fa-question-circle"></i> Problem Description
+                    </h3>
+                    
+                    <div class="input-group" style="margin-bottom: 15px;">
+                        <textarea 
+                            id="problem-description" 
+                            placeholder="Describe the problem you want to find relevant code for (e.g., 'The calculator add function is not working correctly')"
+                            style="width: 100%; min-height: 100px; padding: 12px; border: 2px solid var(--color-light); border-radius: 8px; font-family: inherit; resize: vertical; background: white;"
+                        ></textarea>
+                    </div>
+                    
+                    <div class="kgcompass-controls" style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+                        <div>
+                            <label for="alpha-slider">α (Semantic vs Textual): <span id="alpha-value">0.3</span></label>
+                            <input type="range" id="alpha-slider" min="0" max="1" step="0.1" value="0.3" 
+                                   style="margin-left: 10px;" onchange="updateAlphaValue()">
+                        </div>
+                        <div>
+                            <label for="beta-slider">β (Path Decay): <span id="beta-value">0.6</span></label>
+                            <input type="range" id="beta-slider" min="0.1" max="1" step="0.1" value="0.6" 
+                                   style="margin-left: 10px;" onchange="updateBetaValue()">
+                        </div>
+                        <div>
+                            <label for="top-k-input">Top K Results:</label>
+                            <input type="number" id="top-k-input" min="1" max="50" value="10" 
+                                   style="width: 70px; padding: 5px; margin-left: 10px; border: 1px solid var(--color-light); border-radius: 4px;">
+                        </div>
+                    </div>
+                    
+                    <div class="actions" style="margin-top: 15px;">
+                        <button onclick="calculateRelevanceScores()" class="btn btn-primary">
+                            <i class="fas fa-calculator"></i> Calculate Relevance Scores
+                        </button>
+                        <button onclick="clearKGCompassResults()" class="btn btn-secondary">
+                            <i class="fas fa-trash"></i> Clear Results
+                        </button>
+                        <button onclick="exportKGCompassResults()" class="btn btn-accent">
+                            <i class="fas fa-download"></i> Export Results
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Scoring Progress -->
+                <div id="kgcompass-progress" class="progress-section hidden" style="margin-bottom: 20px;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="kgcompass-progress-fill"></div>
+                    </div>
+                    <div class="progress-text" id="kgcompass-progress-text">Calculating relevance scores...</div>
+                </div>
+                
+                <!-- Results Summary -->
+                <div id="kgcompass-summary" class="hidden" style="margin-bottom: 20px;">
+                    <h3 style="margin-bottom: 15px; color: var(--color-primary);">
+                        <i class="fas fa-chart-bar"></i> Scoring Summary
+                    </h3>
+                    <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                        <div class="stat-card">
+                            <div class="stat-value" id="total-candidates-scored">0</div>
+                            <div class="stat-label">Total Candidates</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="scoring-time">0s</div>
+                            <div class="stat-label">Scoring Time</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="top-score">0.0000</div>
+                            <div class="stat-label">Top Score</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="score-range">0.0000 - 0.0000</div>
+                            <div class="stat-label">Score Range</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Results Table -->
+                <div id="kgcompass-results" class="hidden">
+                    <h3 style="margin-bottom: 15px; color: var(--color-primary);">
+                        <i class="fas fa-trophy"></i> Relevance Ranking Results
+                    </h3>
+                    
+                    <!-- Filter Controls -->
+                    <div class="filter-controls" style="margin-bottom: 15px; padding: 15px; background: rgba(220, 215, 201, 0.3); border-radius: 8px;">
+                        <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+                            <div>
+                                <label for="entity-type-filter">Filter by Type:</label>
+                                <select id="entity-type-filter" onchange="filterKGCompassResults()">
+                                    <option value="all">All Types</option>
+                                    <option value="function">Functions</option>
+                                    <option value="method">Methods</option>
+                                    <option value="class">Classes</option>
+                                    <option value="test">Tests</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="min-score-filter">Min Score:</label>
+                                <input type="number" id="min-score-filter" min="0" max="1" step="0.01" value="0" 
+                                       style="width: 80px;" onchange="filterKGCompassResults()">
+                            </div>
+                            <div>
+                                <label for="file-path-filter">File Path:</label>
+                                <input type="text" id="file-path-filter" placeholder="Filter by file path" 
+                                       style="width: 200px;" onkeyup="filterKGCompassResults()">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="scrollable-table" style="max-height: 500px; overflow-y: auto;">
+                        <table id="kgcompass-results-table">
+                            <thead>
+                                <tr>
+                                    <th>Rank</th>
+                                    <th>Entity Name</th>
+                                    <th>Type</th>
+                                    <th>File Path</th>
+                                    <th>Total Score</th>
+                                    <th>Semantic Sim.</th>
+                                    <th>Textual Sim.</th>
+                                    <th>Path Length</th>
+                                    <th>Path Decay</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="kgcompass-results-tbody">
+                                <!-- Results will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Debug Information -->
+                <div id="kgcompass-debug" class="hidden" style="margin-top: 20px;">
+                    <h3 style="margin-bottom: 15px; color: var(--color-primary);">
+                        <i class="fas fa-bug"></i> Debug Information
+                    </h3>
+                    <div class="debug-info" style="background: #f8f9fa; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 0.9em; max-height: 300px; overflow-y: auto;">
+                        <pre id="kgcompass-debug-content">No debug information available</pre>
+                    </div>
+                </div>
+            </div>
+
             <!-- Kuzu Database -->
             <div id="kuzu-section" class="card hidden slide-up">
                 <h2>
@@ -1298,16 +1456,34 @@
                 <div class="auth-icon">
                     <i class="fab fa-github"></i>
                 </div>
-                <h2>Welcome to GATeR</h2>
-                <p>
-                    Connect your GitHub account to unlock powerful repository analysis and knowledge graph construction capabilities.
-                    <br><br>
-                    <strong>Features:</strong><br>
-                    • Code entity extraction & relationship mapping<br>
-                    • GitHub issues & PR integration<br>
-                    • Interactive knowledge graphs<br>
-                    • Real-time analysis progress tracking
-                </p>
+                  <h2>Welcome to GATeR</h2>
+                  <h3 style="color: var(--color-accent); margin-bottom: 15px;">Graph-Aware Test Repair</h3>
+                  <p>
+                     GATeR is an innovative context-aware test repair system that addresses the fundamental limitations of current test repair tools. Unlike traditional approaches that lack repository-wide context, GATeR leverages advanced knowledge graphs and AI to generate reliable, idiomatic fixes that capture project-specific patterns and conventions.
+                     <br><br>
+                     <strong>The Problem GATeR Solves:</strong><br>
+                     • Current test repair tools produce unreliable fixes without understanding project context<br>
+                     • Manual test repair requires costly expert intervention<br>
+                     • LLM context limitations (4K-32K tokens) cause accuracy issues<br>
+                     • Traditional knowledge graph building is resource-intensive (45-60 min, 4-6GB memory)<br>
+                     • Lack of interpretable repair decision chains limits trustworthiness<br>
+                     <br>
+                     <strong>GATeR's 9-Step Technical Workflow:</strong><br>
+                     <span style="display: grid; grid-template-columns: auto 1fr; gap: 8px; margin-left: 20px;">
+                        <span><strong>1.</strong></span><span><i class="fab fa-github"></i> <strong>Access Codebase:</strong> Retrieve code from GitHub with incremental updates</span>
+                        <span><strong>2.</strong></span><span><i class="fas fa-code-branch"></i> <strong>Parse with Tree-sitter:</strong> Extract Abstract Syntax Trees efficiently</span>
+                        <span><strong>3.</strong></span><span><i class="fas fa-project-diagram"></i> <strong>Build Graph Structure:</strong> Create knowledge graphs using KGCompass methodology</span>
+                        <span><strong>4.</strong></span><span><i class="fas fa-database"></i> <strong>Store in Kùzu:</strong> Persist graph relationships in embedded database</span>
+                        <span><strong>5.</strong></span><span><i class="fas fa-bullseye"></i> <strong>Calculate Relevance:</strong> Score entities using KGCompass formula for context selection</span>
+                        <span><strong>6.</strong></span><span><i class="fas fa-vector-square"></i> <strong>Store in LanceDB:</strong> Store vector embeddings for semantic search</span>
+                        <span><strong>7.</strong></span><span><i class="fas fa-search"></i> <strong>Retrieve Context:</strong> Use GraphRAG for enhanced context retrieval</span>
+                        <span><strong>8.</strong></span><span><i class="fas fa-magic"></i> <strong>Augment Context:</strong> Enhance context with GraphRAG techniques</span>
+                        <span><strong>9.</strong></span><span><i class="fas fa-tools"></i> <strong>Generate Fix:</strong> Produce repairs using LLM and GraphRAG integration</span>
+                     </span>
+                     <br>
+                     
+                     Connect your GitHub account to experience GATeR's advanced repository analysis and knowledge graph construction capabilities.
+                  </p>
                 <a href="/auth/login" class="btn btn-primary" style="font-size: 1.1rem; padding: 15px 30px;">
                     <i class="fab fa-github"></i> Connect GitHub Account
                 </a>
@@ -2955,6 +3131,336 @@
             const kgSection = document.getElementById('kg-visualization-section');
             kgSection.classList.remove('hidden');
             kgSection.classList.add('fade-in');
+            
+            // Also show KGCompass section
+            showKGCompassSection();
+        }
+
+        // KGCompass Relevance Scoring Functions
+        let kgCompassResults = null;
+        let kgCompassDebugInfo = null;
+
+        function updateAlphaValue() {
+            const slider = document.getElementById('alpha-slider');
+            const valueSpan = document.getElementById('alpha-value');
+            valueSpan.textContent = slider.value;
+        }
+
+        function updateBetaValue() {
+            const slider = document.getElementById('beta-slider');
+            const valueSpan = document.getElementById('beta-value');
+            valueSpan.textContent = slider.value;
+        }
+
+        function showKGCompassSection() {
+            const section = document.getElementById('kgcompass-section');
+            section.classList.remove('hidden');
+            section.classList.add('fade-in');
+        }
+
+        function showKGCompassProgress(show = true) {
+            const progressSection = document.getElementById('kgcompass-progress');
+            const progressFill = document.getElementById('kgcompass-progress-fill');
+            const progressText = document.getElementById('kgcompass-progress-text');
+            
+            if (show) {
+                progressSection.classList.remove('hidden');
+                progressFill.style.width = '0%';
+                progressText.textContent = 'Initializing relevance scoring...';
+                
+                // Animate progress
+                let progress = 0;
+                const interval = setInterval(() => {
+                    progress += Math.random() * 15;
+                    if (progress > 90) progress = 90;
+                    
+                    progressFill.style.width = progress + '%';
+                    
+                    if (progress < 30) {
+                        progressText.textContent = 'Analyzing knowledge graph...';
+                    } else if (progress < 60) {
+                        progressText.textContent = 'Generating embeddings...';
+                    } else if (progress < 90) {
+                        progressText.textContent = 'Calculating relevance scores...';
+                    }
+                }, 200);
+                
+                // Store interval for cleanup
+                progressSection.dataset.interval = interval;
+            } else {
+                if (progressSection.dataset.interval) {
+                    clearInterval(progressSection.dataset.interval);
+                }
+                progressFill.style.width = '100%';
+                progressText.textContent = 'Scoring completed!';
+                
+                setTimeout(() => {
+                    progressSection.classList.add('hidden');
+                }, 1000);
+            }
+        }
+
+        async function calculateRelevanceScores() {
+            const problemDescription = document.getElementById('problem-description').value.trim();
+            
+            if (!problemDescription) {
+                showAlert('Please enter a problem description', 'warning');
+                return;
+            }
+            
+            const alpha = parseFloat(document.getElementById('alpha-slider').value);
+            const beta = parseFloat(document.getElementById('beta-slider').value);
+            const topK = parseInt(document.getElementById('top-k-input').value);
+            
+            console.log('KGCompass: Starting relevance scoring', {
+                problemDescription,
+                alpha,
+                beta,
+                topK
+            });
+            
+            showKGCompassProgress(true);
+            
+            try {
+                const response = await fetch('/kgcompass/calculate-relevance', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        problem_description: problemDescription,
+                        alpha: alpha,
+                        beta: beta,
+                        top_k: topK
+                    })
+                });
+                
+                const data = await response.json();
+                
+                showKGCompassProgress(false);
+                
+                if (data.success) {
+                    kgCompassResults = data;
+                    kgCompassDebugInfo = data.debug_info || {};
+                    
+                    displayKGCompassResults(data);
+                    showAlert('Relevance scores calculated successfully!', 'success');
+                    
+                    console.log('KGCompass: Results received', data);
+                } else {
+                    throw new Error(data.error || 'Unknown error occurred');
+                }
+                
+            } catch (error) {
+                showKGCompassProgress(false);
+                console.error('KGCompass: Error calculating relevance scores', error);
+                showAlert('Error calculating relevance scores: ' + error.message, 'error');
+                
+                // Show debug info in case of error
+                displayKGCompassDebug({
+                    error: error.message,
+                    timestamp: new Date().toISOString(),
+                    parameters: { problemDescription, alpha, beta, topK }
+                });
+            }
+        }
+
+        function displayKGCompassResults(data) {
+            // Show summary statistics
+            const summarySection = document.getElementById('kgcompass-summary');
+            summarySection.classList.remove('hidden');
+            
+            document.getElementById('total-candidates-scored').textContent = data.total_candidates_scored || 0;
+            document.getElementById('scoring-time').textContent = (data.scoring_time || 0).toFixed(2) + 's';
+            
+            const topCandidates = data.top_candidates || [];
+            if (topCandidates.length > 0) {
+                const topScore = Math.max(...topCandidates.map(c => parseFloat(c.total_score) || 0));
+                const minScore = Math.min(...topCandidates.map(c => parseFloat(c.total_score) || 0));
+                
+                document.getElementById('top-score').textContent = topScore.toFixed(4);
+                document.getElementById('score-range').textContent = `${minScore.toFixed(4)} - ${topScore.toFixed(4)}`;
+            } else {
+                document.getElementById('top-score').textContent = '0.0000';
+                document.getElementById('score-range').textContent = '0.0000 - 0.0000';
+            }
+            
+            // Show results table
+            const resultsSection = document.getElementById('kgcompass-results');
+            resultsSection.classList.remove('hidden');
+            
+            const tbody = document.getElementById('kgcompass-results-tbody');
+            tbody.innerHTML = '';
+            
+            topCandidates.forEach((candidate, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td><strong>${candidate.entity_name || 'Unknown'}</strong></td>
+                    <td><span class="entity-type-badge entity-type-${candidate.entity_type}">${candidate.entity_type || 'unknown'}</span></td>
+                    <td><code>${candidate.file_path || 'N/A'}</code></td>
+                    <td><strong>${(parseFloat(candidate.total_score) || 0).toFixed(4)}</strong></td>
+                    <td>${(candidate.semantic_similarity || 0).toFixed(3)}</td>
+                    <td>${(candidate.textual_similarity || 0).toFixed(3)}</td>
+                    <td>${(candidate.path_length || 0).toFixed(1)}</td>
+                    <td>${(candidate.path_decay_factor || 0).toFixed(3)}</td>
+                    <td>
+                        <button onclick="showEntityDetails('${candidate.entity_id}')" class="btn btn-sm btn-info">
+                            <i class="fas fa-info-circle"></i>
+                        </button>
+                        <button onclick="highlightEntityInGraph('${candidate.entity_id}')" class="btn btn-sm btn-accent">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </td>
+                `;
+                
+                // Color code rows based on score
+                const score = parseFloat(candidate.total_score) || 0;
+                if (score > 0.7) {
+                    row.style.backgroundColor = 'rgba(34, 197, 94, 0.1)'; // Green
+                } else if (score > 0.4) {
+                    row.style.backgroundColor = 'rgba(251, 191, 36, 0.1)'; // Yellow
+                } else if (score > 0.1) {
+                    row.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'; // Red
+                }
+                
+                tbody.appendChild(row);
+            });
+            
+            // Show debug information if available
+            if (data.debug_info) {
+                displayKGCompassDebug(data.debug_info);
+            }
+        }
+
+        function displayKGCompassDebug(debugInfo) {
+            const debugSection = document.getElementById('kgcompass-debug');
+            const debugContent = document.getElementById('kgcompass-debug-content');
+            
+            debugContent.textContent = JSON.stringify(debugInfo, null, 2);
+            debugSection.classList.remove('hidden');
+        }
+
+        function filterKGCompassResults() {
+            if (!kgCompassResults || !kgCompassResults.top_candidates) return;
+            
+            const typeFilter = document.getElementById('entity-type-filter').value;
+            const minScore = parseFloat(document.getElementById('min-score-filter').value) || 0;
+            const filePathFilter = document.getElementById('file-path-filter').value.toLowerCase();
+            
+            const tbody = document.getElementById('kgcompass-results-tbody');
+            const rows = tbody.querySelectorAll('tr');
+            
+            rows.forEach((row, index) => {
+                const candidate = kgCompassResults.top_candidates[index];
+                if (!candidate) return;
+                
+                let show = true;
+                
+                // Type filter
+                if (typeFilter !== 'all' && candidate.entity_type !== typeFilter) {
+                    show = false;
+                }
+                
+                // Score filter
+                if ((parseFloat(candidate.total_score) || 0) < minScore) {
+                    show = false;
+                }
+                
+                // File path filter
+                if (filePathFilter && !(candidate.file_path || '').toLowerCase().includes(filePathFilter)) {
+                    show = false;
+                }
+                
+                row.style.display = show ? '' : 'none';
+            });
+        }
+
+        function clearKGCompassResults() {
+            // Clear input
+            document.getElementById('problem-description').value = '';
+            
+            // Hide sections
+            document.getElementById('kgcompass-summary').classList.add('hidden');
+            document.getElementById('kgcompass-results').classList.add('hidden');
+            document.getElementById('kgcompass-debug').classList.add('hidden');
+            
+            // Clear data
+            kgCompassResults = null;
+            kgCompassDebugInfo = null;
+            
+            showAlert('KGCompass results cleared', 'info');
+        }
+
+        function exportKGCompassResults() {
+            if (!kgCompassResults) {
+                showAlert('No results to export', 'warning');
+                return;
+            }
+            
+            const exportData = {
+                timestamp: new Date().toISOString(),
+                problem_description: document.getElementById('problem-description').value,
+                parameters: {
+                    alpha: parseFloat(document.getElementById('alpha-slider').value),
+                    beta: parseFloat(document.getElementById('beta-slider').value),
+                    top_k: parseInt(document.getElementById('top-k-input').value)
+                },
+                results: kgCompassResults,
+                debug_info: kgCompassDebugInfo
+            };
+            
+            const dataStr = JSON.stringify(exportData, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            const url = URL.createObjectURL(dataBlob);
+            
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `kgcompass-results-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            showAlert('KGCompass results exported successfully!', 'success');
+        }
+
+        function showEntityDetails(entityId) {
+            // This would show detailed information about the entity
+            // For now, just show an alert with the entity ID
+            showAlert(`Entity details for: ${entityId}`, 'info');
+        }
+
+        function highlightEntityInGraph(entityId) {
+            // This would highlight the entity in the knowledge graph visualization
+            // For now, just show an alert
+            showAlert(`Highlighting entity in graph: ${entityId}`, 'info');
+        }
+
+        // Add CSS for entity type badges
+        const style = document.createElement('style');
+        style.textContent = `
+            .entity-type-badge {
+                padding: 2px 8px;
+                border-radius: 12px;
+                font-size: 0.8em;
+                font-weight: 600;
+                text-transform: uppercase;
+            }
+            .entity-type-function { background: rgba(34, 197, 94, 0.2); color: #166534; }
+            .entity-type-method { background: rgba(59, 130, 246, 0.2); color: #1e40af; }
+            .entity-type-class { background: rgba(168, 85, 247, 0.2); color: #7c2d12; }
+            .entity-type-test { background: rgba(251, 191, 36, 0.2); color: #92400e; }
+            .entity-type-unknown { background: rgba(107, 114, 128, 0.2); color: #374151; }
+        `;
+        document.head.appendChild(style);
+
+        // Show KGCompass section when repository is loaded
+        function showKGCompassSectionIfReady() {
+            const statusElement = document.getElementById('status');
+            if (statusElement && statusElement.textContent.includes('Repository loaded')) {
+                showKGCompassSection();
+            }
         }
     </script>
 </body>

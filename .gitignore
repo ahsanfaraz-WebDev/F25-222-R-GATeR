@@ -6,6 +6,7 @@ __pycache__/
 .Python
 build/
 develop-eggs/
+dist/
 downloads/
 eggs/
 .eggs/
@@ -18,33 +19,49 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
 # Virtual Environment
-.env
-.venv
-env/
-venv/
-ENV/
 gater_env/
+venv/
+env/
+ENV/
 
 # IDE
-.idea/
 .vscode/
+.idea/
 *.swp
 *.swo
-*.swn
+*~
+
+# OS
 .DS_Store
+Thumbs.db
 
-# Project specific
-workspace/repos/
-workspace/logs/
-workspace/gater_knowledge_graph*
+# Logs
 *.log
+workspace/logs/
 
-# Research data (keep sample data, ignore large datasets)
-workspace/data/*.jsonl
-!workspace/data/sample_*.jsonl
+# Database files
+workspace/gater_knowledge_graph/
+*.db
+*.sqlite
 
-# Temporary files
-*.tmp
-*.temp
+# Cache and temporary files
+workspace/repos/
+workspace/data/entities.jsonl
+workspace/data/knowledge_graph.jsonl
+workspace/data/step5_relevance_scores.json
+
+# Environment variables
+.env
+
+# Test files
+test_*.py
+*_test.py
+verify_*.py
+debug_*.py
+check_*.py
+
+# Documentation build
+docs/_build/

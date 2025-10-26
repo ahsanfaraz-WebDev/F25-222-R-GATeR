@@ -36,7 +36,7 @@ class KnowledgeGraphManager:
     Supports incremental updates and persistence
     """
     
-    def __init__(self, kuzu_db_path: Optional[str] = None, kuzu_buffer_size: int = 1073741824):
+    def __init__(self, kuzu_db_path: Optional[str] = None, kuzu_buffer_size: int = 4294967296):
         self.graph = nx.DiGraph()
         self.entity_index = {}  # Quick lookup: entity_name -> node_id
         self.relationship_types = {

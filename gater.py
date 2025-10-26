@@ -95,17 +95,21 @@ class GATeRAnalyzer:
         self.repo_parser = RepositoryParser(github_token)
         self.entity_extractor = EntityExtractor()
         
-        # Initialize knowledge graph manager with Kuzu support
-        kuzu_db_path = os.getenv('KUZU_DB_PATH', 'workspace/gater_knowledge_graph.db')
-        kuzu_buffer_size = int(os.getenv('KUZU_BUFFER_POOL_SIZE', '1073741824'))
-        self.kg_manager = KnowledgeGraphManager(kuzu_db_path, kuzu_buffer_size)
-        
         # Configuration
         self.workspace_dir = os.getenv('WORKSPACE_DIR', 'workspace')
         self.data_dir = os.getenv('DATA_DIR', 'workspace/data')
         self.repos_dir = os.getenv('REPOS_DIR', 'workspace/repos')
         self.kg_output_file = os.getenv('KG_OUTPUT_FILE', 'workspace/data/knowledge_graph.jsonl')
         self.entities_output_file = os.getenv('ENTITIES_OUTPUT_FILE', 'workspace/data/entities.jsonl')
+        
+        # Initialize knowledge graph manager with Kuzu support
+        kuzu_db_path = os.getenv('KUZU_DB_PATH', 'workspace/gater_knowledge_graph.db')
+        kuzu_buffer_size = int(os.getenv('KUZU_BUFFER_POOL_SIZE', '1073741824'))
+        self.kg_manager = KnowledgeGraphManager(kuzu_db_path, kuzu_buffer_size)
+        
+        # Initialize Step 5: Relevance Scoring (KGCompass)
+        from src.relevance.step5_relevance_scoring import Step5RelevanceScoring
+        self.relevance_scorer = Step5RelevanceScoring(workspace_dir=self.workspace_dir)
         
         # Ensure directories exist
         for directory in [self.workspace_dir, self.data_dir, self.repos_dir]:
@@ -593,6 +597,56 @@ class GATeRAnalyzer:
             
         except Exception as e:
             self.logger.error(f"Failed to export entities: {e}")
+
+    def calculate_relevance_scores(self, problem_description: str, issue_context: Dict = None) -> Dict:
+        """
+        Step 5: Calculate Relevance Scores using KGCompass methodology
+        
+        Args:
+            problem_description: Natural language description of the problem
+            issue_context: Additional context about the issue
+            
+        Returns:
+            Dictionary with relevance scoring results
+        """
+        self.logger.info("Starting Step 5: Calculate Relevance Scores")
+        
+        try:
+            # Use the relevance scorer with the current knowledge graph
+            results = self.relevance_scorer.calculate_relevance_scores(
+                problem_description=problem_description,
+                knowledge_graph=self.kg_manager,
+                issue_context=issue_context
+            )
+            
+            self.logger.info(f"Step 5 completed. Found {len(results.get('top_candidates', []))} top candidates")
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"Error in Step 5: {e}")
+            return {
+                'success': False,
+                'step': 5,
+                'error': str(e),
+                'timestamp': datetime.now().isoformat()
+            }
+    
+    def get_top_relevant_functions(self, problem_description: str, top_k: int = 20) -> List[Dict]:
+        """
+        Get top-k most relevant functions for a problem description
+        
+        Args:
+            problem_description: Problem description
+            top_k: Number of top functions to return
+            
+        Returns:
+            List of relevant function dictionaries with scores
+        """
+        return self.relevance_scorer.get_top_relevant_functions(
+            problem_description=problem_description,
+            knowledge_graph=self.kg_manager,
+            top_k=top_k
+        )
 
     def analyze_local_project(self, project_path: str) -> Dict:
         """

@@ -6,6 +6,7 @@ Flask web server with GitHub OAuth integration and incremental analysis
 import os
 import logging
 import json
+import numpy as np
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 from flask_cors import CORS
@@ -32,6 +33,21 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger('gater.web_server')
+
+def convert_numpy_types(obj):
+    """Convert numpy types to Python native types for JSON serialization"""
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    else:
+        return obj
 
 # Flask app configuration
 app = Flask(__name__)
@@ -652,6 +668,156 @@ def kuzu_clear():
     except Exception as e:
         logger.error(f"Error clearing Kuzu database: {e}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/kgcompass/calculate-relevance', methods=['POST'])
+def calculate_kgcompass_relevance():
+    """Calculate KGCompass relevance scores for a problem description"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
+        
+        problem_description = data.get('problem_description', '').strip()
+        if not problem_description:
+            return jsonify({'error': 'Problem description is required'}), 400
+        
+        # Get optional parameters
+        alpha = data.get('alpha', 0.3)
+        beta = data.get('beta', 0.6)
+        top_k = data.get('top_k', 20)
+        
+        logger.info(f"KGCompass: Calculating relevance for: '{problem_description[:50]}...'")
+        logger.debug(f"KGCompass parameters: α={alpha}, β={beta}, top_k={top_k}")
+        
+        # Validate parameters
+        if not (0 <= alpha <= 1):
+            return jsonify({'error': 'Alpha must be between 0 and 1'}), 400
+        if not (0.1 <= beta <= 1):
+            return jsonify({'error': 'Beta must be between 0.1 and 1'}), 400
+        if not (1 <= top_k <= 100):
+            return jsonify({'error': 'Top K must be between 1 and 100'}), 400
+        
+        # Update GATeR's relevance scorer parameters
+        if hasattr(gater, 'relevance_scorer') and gater.relevance_scorer:
+            gater.relevance_scorer.relevance_scorer.alpha = alpha
+            gater.relevance_scorer.relevance_scorer.beta = beta
+            gater.relevance_scorer.top_k = top_k
+            logger.debug(f"Updated KGCompass parameters: α={alpha}, β={beta}")
+        
+        # Calculate relevance scores
+        import time
+        start_time = time.time()
+        
+        relevance_results = gater.calculate_relevance_scores(
+            problem_description=problem_description,
+            issue_context=None
+        )
+        
+        end_time = time.time()
+        scoring_time = end_time - start_time
+        
+        if relevance_results.get('success', False):
+            # Format results for frontend
+            top_candidates = relevance_results.get('top_candidates', [])
+            
+            # Convert RelevanceScore objects to dictionaries if needed
+            formatted_candidates = []
+            for candidate in top_candidates:
+                if hasattr(candidate, '__dict__'):
+                    # It's a RelevanceScore object
+                    formatted_candidate = {
+                        'entity_id': candidate.entity_id,
+                        'entity_name': candidate.entity_name,
+                        'entity_type': candidate.entity_type,
+                        'score': candidate.total_score,
+                        'semantic_similarity': candidate.semantic_similarity,
+                        'textual_similarity': candidate.textual_similarity,
+                        'path_length': candidate.path_length,
+                        'path_decay_factor': candidate.path_decay_factor,
+                        'file_path': candidate.file_path or 'N/A',
+                        'path_info': candidate.path_info
+                    }
+                else:
+                    # It's already a dictionary
+                    formatted_candidate = candidate
+                
+                # Convert numpy types to Python types for JSON serialization
+                formatted_candidate = convert_numpy_types(formatted_candidate)
+                formatted_candidates.append(formatted_candidate)
+            
+            # Prepare debug information
+            debug_info = {
+                'graph_stats': {
+                    'nodes': gater.kg_manager.graph.number_of_nodes() if gater.kg_manager.graph else 0,
+                    'edges': gater.kg_manager.graph.number_of_edges() if gater.kg_manager.graph else 0
+                },
+                'parameters': {
+                    'alpha': alpha,
+                    'beta': beta,
+                    'top_k': top_k,
+                    'problem_length': len(problem_description)
+                },
+                'scoring_details': {
+                    'total_candidates_found': len(formatted_candidates),
+                    'scoring_time_seconds': scoring_time,
+                    'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
+                }
+            }
+            
+            # Add score distribution info
+            if formatted_candidates:
+                scores = [c.get('score', 0) for c in formatted_candidates]
+                debug_info['score_distribution'] = {
+                    'min': min(scores),
+                    'max': max(scores),
+                    'mean': sum(scores) / len(scores),
+                    'count_above_0_5': sum(1 for s in scores if s > 0.5),
+                    'count_above_0_3': sum(1 for s in scores if s > 0.3),
+                    'count_above_0_1': sum(1 for s in scores if s > 0.1)
+                }
+            
+            response_data = {
+                'success': True,
+                'step': 5,
+                'problem_description': problem_description,
+                'total_candidates_scored': relevance_results.get('total_candidates_scored', len(formatted_candidates)),
+                'top_candidates': formatted_candidates[:top_k],
+                'scoring_time': scoring_time,
+                'debug_info': debug_info,
+                'timestamp': relevance_results.get('timestamp', time.strftime('%Y-%m-%d %H:%M:%S'))
+            }
+            
+            logger.info(f"KGCompass: Successfully calculated {len(formatted_candidates)} relevance scores in {scoring_time:.2f}s")
+            
+            # Final conversion of entire response to handle any remaining numpy types
+            response_data = convert_numpy_types(response_data)
+            return jsonify(response_data)
+            
+        else:
+            error_msg = relevance_results.get('error', 'Unknown error in relevance calculation')
+            logger.error(f"KGCompass: Calculation failed: {error_msg}")
+            
+            return jsonify({
+                'success': False,
+                'error': error_msg,
+                'debug_info': {
+                    'problem_description': problem_description,
+                    'parameters': {'alpha': alpha, 'beta': beta, 'top_k': top_k},
+                    'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
+                }
+            }), 500
+        
+    except Exception as e:
+        logger.error(f"KGCompass: Error in calculate_relevance endpoint: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'debug_info': {
+                'error_type': type(e).__name__,
+                'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
+            }
+        }), 500
 
 def is_authenticated():
     """Check if user is authenticated"""
